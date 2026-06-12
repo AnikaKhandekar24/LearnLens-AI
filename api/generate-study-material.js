@@ -116,9 +116,13 @@ STUDENT NOTES:
 ${notes.trim()}`;
 
   try {
-    const geminiResponse = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-      {
+    const models = ["gemini-2.5-flash", "gemini-2.5-flash", "gemini-2.0-flash"];
+    let geminiResponse;
+
+    for (let attempt = 0; attempt < models.length; attempt += 1) {
+      geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${models[attempt]}:generateContent`,
+        {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
@@ -129,12 +133,18 @@ ${notes.trim()}`;
             temperature: 0.35,
           },
         }),
-      },
-    );
+        },
+      );
+
+      if (geminiResponse.ok) break;
+      const retryable = [429, 500, 502, 503, 504].includes(geminiResponse.status);
+      const detail = await geminiResponse.text();
+      console.error(`Gemini ${models[attempt]} error:`, geminiResponse.status, detail.slice(0, 500));
+      if (!retryable) break;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
 
     if (!geminiResponse.ok) {
-      const detail = await geminiResponse.text();
-      console.error("Gemini API error:", geminiResponse.status, detail.slice(0, 500));
       return response.status(502).json({ error: "AI generation is unavailable right now. Try again later or use sample mode." });
     }
 
